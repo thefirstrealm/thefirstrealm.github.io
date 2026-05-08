@@ -82,8 +82,7 @@ function doLogin() {
 
 // ───────── GITHUB API ─────────
 async function ghGet() {
-  const headers = { 
-    'Cache-Control': 'no-cache',
+  const headers = {
     'Accept': 'application/vnd.github.v3+json'
   };
   if (GH_TOKEN) headers.Authorization = `Bearer ${GH_TOKEN}`;
