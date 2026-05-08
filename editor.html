@@ -28,7 +28,6 @@
   <div id="board"></div>
 </div>
 
-<!-- CARD MODAL -->
 <div class="modal-backdrop" id="edit-modal">
   <div class="modal">
     <button onclick="closeEditModal()">×</button>
@@ -87,9 +86,15 @@ function doLogin() {
 
 // ───────── GITHUB ─────────
 async function ghGet() {
+  // Added timestamp to URL to prevent 409 Conflict errors caused by browser caching
   const r = await fetch(
-    `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`,
-    { headers: { Authorization: `Bearer ${GH_TOKEN}` } }
+    `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}&t=${Date.now()}`,
+    { 
+      headers: { 
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'Cache-Control': 'no-cache' 
+      } 
+    }
   );
   if (!r.ok) throw new Error(await r.text());
   return r.json();
@@ -97,19 +102,24 @@ async function ghGet() {
 
 async function loadBoard() {
   setStatus("Loading...");
-  const res = await ghGet();
-  fileSha = res.sha;
-  boardData = JSON.parse(atob(res.content.replace(/\n/g,'')));
-  render();
-  setStatus("Loaded ✓");
+  try {
+    const res = await ghGet();
+    fileSha = res.sha;
+    boardData = JSON.parse(atob(res.content.replace(/\n/g,'')));
+    render();
+    setStatus("Loaded ✓");
+  } catch (e) {
+    setStatus("Load failed: " + e.message);
+  }
 }
 
 async function saveBoard() {
   setStatus("Saving...");
-  document.getElementById('save-btn').disabled = true;
+  const saveBtn = document.getElementById('save-btn');
+  saveBtn.disabled = true;
 
   try {
-    // 1. Always fetch the LATEST SHA right before saving to avoid 409 errors
+    // 1. Force fetch the absolute latest SHA right before sending update
     const latest = await ghGet();
     fileSha = latest.sha;
 
@@ -117,7 +127,7 @@ async function saveBoard() {
     const jsonString = JSON.stringify(boardData, null, 2);
     const content = btoa(unescape(encodeURIComponent(jsonString)));
 
-    // 3. Push to GitHub
+    // 3. Push to GitHub using the fresh SHA
     const r = await fetch(
       `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`,
       {
@@ -129,7 +139,7 @@ async function saveBoard() {
         body: JSON.stringify({
           message: 'Lore update: Character board modified',
           content,
-          sha: fileSha, // Use the fresh SHA
+          sha: fileSha,
           branch: BRANCH
         })
       }
@@ -140,17 +150,17 @@ async function saveBoard() {
       throw new Error(errData.message || "Unknown GitHub Error");
     }
 
-    setStatus("Saved ✓");
-    // Update local fileSha with the one returned from the successful PUT
+    // 4. Update the local SHA with the one returned from the successful save
     const resData = await r.json();
     fileSha = resData.content.sha;
 
+    setStatus("Saved ✓");
   } catch (e) {
     console.error(e);
     setStatus("Save failed: " + e.message);
   }
 
-  document.getElementById('save-btn').disabled = false;
+  saveBtn.disabled = false;
 }
 
 function setStatus(t) {
@@ -161,6 +171,8 @@ function setStatus(t) {
 function render() {
   const board = document.getElementById('board');
   board.innerHTML = '';
+
+  if (!boardData || !boardData.columns) return;
 
   boardData.columns.forEach((col, ci) => {
     const el = document.createElement('div');
@@ -191,15 +203,20 @@ function card(c, ci, ki) {
   el.className = 'card';
 
   el.innerHTML = `
-    <strong>${c.roleplayName}</strong>
-    <div>${c.username}</div>
-    <div>${c.titles?.join(', ') || ''}</div>
-    <div>${c.factions?.join(', ') || ''}</div>
-    <div>${c.religion || ''}</div>
-    <div>Age: ${c.characterAge || ''}</div>
-    <div>${c.attributes?.join(', ') || ''}</div>
-
-    <button onclick="edit(${ci},${ki})">Edit</button>
+    <div class="card-top">
+        <strong class="card-name">${c.roleplayName || 'Unnamed'}</strong>
+        <div class="card-actions">
+            <button onclick="edit(${ci},${ki})">Edit</button>
+            <button onclick="deleteCard(${ci},${ki})">×</button>
+        </div>
+    </div>
+    <div class="card-owner">${c.username || ''}</div>
+    <div class="card-desc">
+        ${c.factions?.join(', ') || ''}
+    </div>
+    <div class="tags">
+        ${(c.attributes || []).map(t => `<span class="tag">${t}</span>`).join('')}
+    </div>
   `;
 
   return el;
@@ -228,7 +245,7 @@ function renameColumn(ci) {
 }
 
 function deleteColumn(ci) {
-  if (!confirm("Delete column?")) return;
+  if (!confirm("Delete column and all its cards?")) return;
   boardData.columns.splice(ci,1);
   render();
 }
@@ -242,6 +259,12 @@ function openNew(ci) {
 function edit(ci, ki) {
   editing = { ci, ki };
   openModal("Edit Card", boardData.columns[ci].cards[ki]);
+}
+
+function deleteCard(ci, ki) {
+    if (!confirm("Delete this character?")) return;
+    boardData.columns[ci].cards.splice(ki, 1);
+    render();
 }
 
 function openModal(title, c) {
@@ -271,7 +294,6 @@ function saveCard() {
 
   const card = {
     id: ki !== null ? boardData.columns[ci].cards[ki].id : 'card-' + Date.now(),
-
     roleplayName: v('f-rpname'),
     username: v('f-username'),
     titles: split('f-titles'),
@@ -279,7 +301,7 @@ function saveCard() {
     religion: v('f-religion'),
     characterAge: Number(v('f-age') || 0),
     attributes: split('f-attributes'),
-    created: new Date().toISOString().slice(0,10)
+    created: ki !== null ? boardData.columns[ci].cards[ki].created : new Date().toISOString().slice(0,10)
   };
 
   if (ki !== null) boardData.columns[ci].cards[ki] = card;
