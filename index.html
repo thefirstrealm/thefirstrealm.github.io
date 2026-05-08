@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lore Team — Character Board</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>✦ Lore Team — Character Board</h1>
+    <p id="status">Loading…</p>
+  </div>
+  <button id="refresh-btn" onclick="loadBoard()">↻ Refresh</button>
+</header>
+
+<div id="board"></div>
+
+<div id="modal-backdrop" onclick="closeModal(event)">
+  <div id="modal">
+    <button id="modal-close" onclick="closeModal()">×</button>
+    <img id="m-img" class="m-img" src="" alt="" style="display:none">
+    <h2 id="m-name"></h2>
+    <div id="m-owner" class="m-owner"></div>
+    <p id="m-desc" class="m-desc"></p>
+    <div id="m-tags" class="tags"></div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+// Replace with your GitHub details
+const OWNER = 'thefirstrealm';
+const REPO  = 'thefirstrealm.github.io';
+const FILE  = 'board.json';
+const BRANCH = 'main'; 
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COL_COLORS = {
+  'submitted':  'var(--col-submitted)',
+  'in-review':  'var(--col-review)',
+  'approved':   'var(--col-approved)',
+  'published':  'var(--col-published)'
+};
+
+async function loadBoard() {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Loading…';
+  
+  try {
+    // We use the raw.githubusercontent.com URL for public viewing.
+    // Cache-bust (?t=) is vital so writers' updates appear immediately for viewers.
+    const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${FILE}?t=${Date.now()}`;
+    const res = await fetch(url);
+    
+    if (!res.ok) throw new Error(`Github returned ${res.status}`);
+    
+    const data = await res.json();
+    renderBoard(data);
+    statusEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    statusEl.textContent = 'Could not load board. Check repo settings.';
+    console.error(e);
+  }
+}
+
+function renderBoard(data) {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  
+  if (!data.columns) return;
+
+  for (const col of data.columns) {
+    const color = COL_COLORS[col.id] || '#6b7280';
+    const colEl = document.createElement('div');
+    colEl.className = 'column';
+    colEl.innerHTML = `
+      <div class="col-header">
+        <div class="col-dot" style="background:${color}"></div>
+        <span class="col-title">${col.title}</span>
+        <span class="col-count">${col.cards.length}</span>
+      </div>
+      <div class="cards" id="col-${col.id}"></div>`;
+    board.appendChild(colEl);
+
+    const cardsEl = colEl.querySelector('.cards');
+    if (col.cards.length === 0) {
+      cardsEl.innerHTML = '<div class="empty">No cards yet</div>';
+    }
+
+    for (const card of col.cards) {
+      const cardEl = document.createElement('div');
+      cardEl.className = 'card';
+      cardEl.onclick = () => openModal(card);
+      cardEl.innerHTML = `
+        ${card.image ? `<img class="card-img" src="${card.image}" alt="${card.name}">` : ''}
+        <div class="card-name">${card.name}</div>
+        <div class="card-owner">${card.owner}</div>
+        <div class="card-desc">${card.description}</div>
+        <div class="tags">${(card.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>`;
+      cardsEl.appendChild(cardEl);
+    }
+  }
+}
+
+function openModal(card) {
+  document.getElementById('m-name').textContent = card.name;
+  document.getElementById('m-owner').textContent = card.owner;
+  document.getElementById('m-desc').textContent = card.description;
+  document.getElementById('m-tags').innerHTML = (card.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
+  
+  const img = document.getElementById('m-img');
+  if (card.image) { 
+    img.src = card.image; 
+    img.style.display = 'block'; 
+  } else { 
+    img.style.display = 'none'; 
+  }
+  
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal(e) {
+  // Closes if clicking the backdrop, the X button, or if called directly
+  if (!e || e.target === document.getElementById('modal-backdrop') || e.currentTarget.id === 'modal-close') {
+    document.getElementById('modal-backdrop').classList.remove('open');
+  }
+}
+
+// Initial Load
+loadBoard();
+
+// Auto-refresh every 5 minutes to catch team updates
+setInterval(loadBoard, 5 * 60 * 1000);
+</script>
+</body>
+</html>

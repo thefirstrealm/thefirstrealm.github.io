@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lore Team — Editor</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+
+<div id="login-screen">
+  <h1>✦ Lore Team Editor</h1>
+  <input type="password" id="pw-input" placeholder="Editor password" onkeydown="if(event.key==='Enter')doLogin()">
+  <input type="password" id="pat-input" placeholder="Your GitHub PAT (github_pat_...)" onkeydown="if(event.key==='Enter')doLogin()">
+  <p class="help-text">Your personal token is saved only in this browser and never uploaded to GitHub.</p>
+  <button id="login-btn" onclick="doLogin()">Enter</button>
+  <span id="login-err"></span>
+</div>
+
+<div id="app">
+  <header>
+    <h1>✦ Lore Editor</h1>
+    <span id="save-status"></span>
+    <button id="save-btn" onclick="saveBoard()">Save to GitHub</button>
+  </header>
+  <div id="board"></div>
+</div>
+
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeEditModal()">×</button>
+    <h2 id="edit-title">Edit card</h2>
+    <div class="field"><label>Character name</label><input id="f-name" type="text"></div>
+    <div class="field"><label>Submitted by</label><input id="f-owner" type="text" placeholder="submitted by @username"></div>
+    <div class="field"><label>Description</label><textarea id="f-desc" rows="4"></textarea></div>
+    <div class="field"><label>Image URL (optional)</label><input id="f-img" type="text" placeholder="https://..."></div>
+    <div class="field"><label>Tags (comma-separated)</label><input id="f-tags" type="text" placeholder="rogue, elf, mystery"></div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveCard()">Save card</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-backdrop">
+  <div id="confirm-box">
+    <p>Delete this card? This cannot be undone until you save.</p>
+    <div class="btns">
+      <button class="btn-cancel" onclick="document.getElementById('confirm-backdrop').classList.remove('open')">Cancel</button>
+      <button class="btn-danger" id="confirm-del-btn">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const OWNER  = 'thefirstrealm';
+const REPO   = 'thefirstrealm.github.io';
+const FILE   = 'board.json';
+const BRANCH = 'main';
+
+// Static site gateway password (to filter out random public visitors)
+const EDITOR_PASSWORD = 'lore-team-2025';
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COL_COLORS = {
+  'submitted': '#4a7fa5', 'in-review': '#c8903a',
+  'approved': '#3a9e6e',  'published': '#8b5cf6'
+};
+
+let GH_TOKEN = '';      // Captured on login; never stored in this source file
+let boardData = null;
+let editingCard = null; // { colIdx, cardIdx } or { colIdx } for new
+let fileSha = null;     // needed for GitHub API update
+
+// On load, retrieve existing token from browser storage if they have logged in before
+window.onload = () => {
+  const savedToken = localStorage.getItem('lore_gh_token');
+  if (savedToken) {
+    document.getElementById('pat-input').value = savedToken;
+  }
+};
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  const pat = document.getElementById('pat-input').value.trim();
+
+  if (pw !== EDITOR_PASSWORD) {
+    document.getElementById('login-err').textContent = 'Incorrect editor password.';
+    return;
+  }
+
+  if (!pat.startsWith('github_pat_')) {
+    document.getElementById('login-err').textContent = 'Your GitHub token must start with "github_pat_"';
+    return;
+  }
+
+  // Token is verified locally on form criteria, save to browser memory
+  GH_TOKEN = pat;
+  localStorage.setItem('lore_gh_token', pat);
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadBoard();
+}
+
+// ── Load ─────────────────────────────────────────────────────────────────────
+async function loadBoard() {
+  setSaveStatus('Loading…');
+  try {
+    const res = await ghGet();
+    fileSha = res.sha;
+    boardData = JSON.parse(atob(res.content.replace(/\n/g,'')));
+    renderBoard();
+    setSaveStatus('Loaded ✓');
+  } catch(e) {
+    setSaveStatus('Load failed: Verify your GitHub token has access permissions.');
+    console.error(e);
+  }
+}
+
+async function ghGet() {
+  const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}`, {
+    headers: { Authorization: `Bearer ${GH_TOKEN}`, Accept: 'application/vnd.github+json' }
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+async function saveBoard() {
+  document.getElementById('save-btn').disabled = true;
+  setSaveStatus('Saving…');
+  try {
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(boardData, null, 2))));
+    const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${GH_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
+      body: JSON.stringify({ message: 'Update board.json via editor', content, sha: fileSha, branch: BRANCH })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    fileSha = data.content.sha;
+    setSaveStatus('Saved ✓  ' + new Date().toLocaleTimeString());
+  } catch(e) {
+    setSaveStatus('Save failed: ' + e.message);
+  }
+  document.getElementById('save-btn').disabled = false;
+}
+
+function setSaveStatus(msg) { document.getElementById('save-status').textContent = msg; }
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  boardData.columns.forEach((col, ci) => {
+    const color = COL_COLORS[col.id] || '#6b7280';
+    const colEl = document.createElement('div');
+    colEl.className = 'column';
+    colEl.innerHTML = `
+      <div class="col-header">
+        <div class="col-dot" style="background:${color}"></div>
+        <span class="col-title">${col.title}</span>
+        <button class="add-card-btn" title="Add card" onclick="openNewCard(${ci})">+</button>
+      </div>
+      <div class="cards" id="col-${ci}" data-col="${ci}"></div>`;
+    board.appendChild(colEl);
+
+    const cardsEl = colEl.querySelector('.cards');
+    col.cards.forEach((card, ki) => {
+      cardsEl.appendChild(buildCardEl(card, ci, ki));
+    });
+
+    // Drop zone
+    cardsEl.addEventListener('dragover', e => { e.preventDefault(); cardsEl.classList.add('drag-over'); });
+    cardsEl.addEventListener('dragleave', () => cardsEl.classList.remove('drag-over'));
+    cardsEl.addEventListener('drop', e => handleDrop(e, ci));
+  });
+}
+
+function buildCardEl(card, ci, ki) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.draggable = true;
+  el.dataset.col = ci;
+  el.dataset.card = ki;
+  el.innerHTML = `
+    <div class="card-top">
+      <div class="card-name">${card.name}</div>
+      <div class="card-actions">
+        <button title="Edit" onclick="openEditCard(${ci},${ki})">✎</button>
+        <button title="Delete" onclick="confirmDelete(${ci},${ki})">✕</button>
+      </div>
+    </div>
+    <div class="card-owner">${card.owner}</div>
+    <div class="card-desc">${card.description}</div>
+    <div class="tags">${(card.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>`;
+  el.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ ci, ki }));
+    setTimeout(() => el.classList.add('dragging'), 0);
+  });
+  el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  return el;
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+function handleDrop(e, targetCol) {
+  e.preventDefault();
+  document.querySelectorAll('.cards').forEach(c => c.classList.remove('drag-over'));
+  const { ci, ki } = JSON.parse(e.dataTransfer.getData('text/plain'));
+  if (ci === targetCol && ki === undefined) return;
+  const card = boardData.columns[ci].cards.splice(ki, 1)[0];
+  boardData.columns[targetCol].cards.push(card);
+  renderBoard();
+}
+
+// ── Card modal ────────────────────────────────────────────────────────────────
+function openNewCard(ci) {
+  editingCard = { ci, ki: null };
+  document.getElementById('edit-title').textContent = 'New character card';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-owner').value = 'submitted by @';
+  document.getElementById('f-desc').value = '';
+  document.getElementById('f-img').value = '';
+  document.getElementById('f-tags').value = '';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function openEditCard(ci, ki) {
+  editingCard = { ci, ki };
+  const card = boardData.columns[ci].cards[ki];
+  document.getElementById('edit-title').textContent = 'Edit card';
+  document.getElementById('f-name').value = card.name;
+  document.getElementById('f-owner').value = card.owner;
+  document.getElementById('f-desc').value = card.description;
+  document.getElementById('f-img').value = card.image || '';
+  document.getElementById('f-tags').value = (card.tags||[]).join(', ');
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+
+function saveCard() {
+  const { ci, ki } = editingCard;
+  const card = {
+    id: ki !== null ? boardData.columns[ci].cards[ki].id : 'card-' + Date.now(),
+    name: document.getElementById('f-name').value.trim(),
+    owner: document.getElementById('f-owner').value.trim(),
+    description: document.getElementById('f-desc').value.trim(),
+    image: document.getElementById('f-img').value.trim(),
+    tags: document.getElementById('f-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+    created: ki !== null ? boardData.columns[ci].cards[ki].created : new Date().toISOString().slice(0,10)
+  };
+  if (!card.name) return;
+  if (ki !== null) boardData.columns[ci].cards[ki] = card;
+  else boardData.columns[ci].cards.push(card);
+  closeEditModal();
+  renderBoard();
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+function confirmDelete(ci, ki) {
+  const backdrop = document.getElementById('confirm-backdrop');
+  backdrop.classList.add('open');
+  document.getElementById('confirm-del-btn').onclick = () => {
+    boardData.columns[ci].cards.splice(ki, 1);
+    backdrop.classList.remove('open');
+    renderBoard();
+  };
+}
+</script>
+</body>
+</html>
