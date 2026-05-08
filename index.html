@@ -13,15 +13,15 @@
     <h1>✦ Lore Team — Character Board</h1>
     <p id="status">Loading…</p>
   </div>
-  <button onclick="loadBoard()">↻ Refresh</button>
+  <button onclick="loadBoard()" class="btn-secondary">↻ Refresh</button>
 </header>
 
 <div id="board"></div>
 
 <!-- ───────── MODAL ───────── -->
-<div id="modal-backdrop" onclick="closeModal(event)">
-  <div id="modal">
-    <button id="modal-close" onclick="closeModal()">×</button>
+<div class="modal-backdrop" onclick="closeModal(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
 
     <img id="m-img" class="m-img" style="display:none">
 
