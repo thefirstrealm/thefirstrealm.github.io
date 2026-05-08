@@ -82,15 +82,14 @@ function doLogin() {
 
 // ───────── GITHUB API ─────────
 async function ghGet() {
+  const headers = { 
+    'Cache-Control': 'no-cache',
+    'Accept': 'application/vnd.github.v3+json'
+  };
+  if (GH_TOKEN) headers.Authorization = `Bearer ${GH_TOKEN}`;
   const r = await fetch(
     `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}&t=${Date.now()}`,
-    { 
-      headers: { 
-        Authorization: `Bearer ${GH_TOKEN}`,
-        'Cache-Control': 'no-cache',
-        'Accept': 'application/vnd.github.v3+json'
-      } 
-    }
+    { headers }
   );
   if (!r.ok) throw new Error(await r.text());
   return r.json();
@@ -105,7 +104,7 @@ async function loadBoard() {
     setStatus("Loaded ✓");
   } catch (e) {
     console.error(e);
-    setStatus("Load failed: Check Token/Permissions");
+    setStatus("Load failed: " + e.message);
   }
 }
 
