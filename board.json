@@ -6,14 +6,13 @@
       "cards": [
         {
           "id": "card-1",
-          "name": "Seraphine Dusk",
-          "owner": "submitted by @moonwriter",
-          "description": "A half-elven rogue with a mysterious past tied to the Ember Courts.",
-          "image": "",
-          "tags": [
-            "rogue",
-            "half-elf"
-          ],
+          "roleplayName": "Seraphine Dusk",
+          "username": "@moonwriter",
+          "titles": [],
+          "factions": [],
+          "religion": "",
+          "characterAge": 0,
+          "attributes": ["rogue", "half-elf"],
           "created": "2025-01-10"
         }
       ]
@@ -24,14 +23,13 @@
       "cards": [
         {
           "id": "card-2",
-          "name": "Aldric Vane",
-          "owner": "submitted by @starlore",
-          "description": "A disgraced knight seeking redemption in the northern wastes.",
-          "image": "",
-          "tags": [
-            "knight",
-            "human"
-          ],
+          "roleplayName": "Aldric Vane",
+          "username": "@starlore",
+          "titles": [],
+          "factions": [],
+          "religion": "",
+          "characterAge": 0,
+          "attributes": ["knight", "human"],
           "created": "2025-01-08"
         }
       ]
@@ -39,25 +37,24 @@
     {
       "id": "approved",
       "title": "Approved",
-      "cards": [
-        {
-          "id": "card-3",
-          "name": "Nyxara",
-          "owner": "submitted by @velvetquill",
-          "description": "The Shadow Weaver of the Obsidian Spire. Ancient, calculating, and fond of riddles. EEE",
-          "image": "",
-          "tags": [
-            "mage",
-            "ancient"
-          ],
-          "created": "2024-12-20"
-        }
-      ]
+      "cards": []
     },
     {
       "id": "published",
       "title": "Published",
-      "cards": []
+      "cards": [
+        {
+          "id": "card-3",
+          "roleplayName": "Nyxara",
+          "username": "@velvetquill",
+          "titles": [],
+          "factions": [],
+          "religion": "",
+          "characterAge": 0,
+          "attributes": ["mage", "ancient"],
+          "created": "2024-12-20"
+        }
+      ]
     }
   ]
 }
