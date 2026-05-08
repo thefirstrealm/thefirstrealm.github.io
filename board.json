@@ -12,7 +12,10 @@
           "factions": [],
           "religion": "",
           "characterAge": 0,
-          "attributes": ["rogue", "half-elf"],
+          "attributes": [
+            "rogue",
+            "half-elf"
+          ],
           "created": "2025-01-10"
         }
       ]
@@ -29,7 +32,10 @@
           "factions": [],
           "religion": "",
           "characterAge": 0,
-          "attributes": ["knight", "human"],
+          "attributes": [
+            "knight",
+            "human"
+          ],
           "created": "2025-01-08"
         }
       ]
@@ -51,7 +57,10 @@
           "factions": [],
           "religion": "",
           "characterAge": 0,
-          "attributes": ["mage", "ancient"],
+          "attributes": [
+            "mage",
+            "ancient"
+          ],
           "created": "2024-12-20"
         }
       ]
