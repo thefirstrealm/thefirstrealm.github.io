@@ -109,13 +109,15 @@ async function saveBoard() {
   document.getElementById('save-btn').disabled = true;
 
   try {
+    // 1. Always fetch the LATEST SHA right before saving to avoid 409 errors
     const latest = await ghGet();
     fileSha = latest.sha;
 
-    const content = btoa(unescape(encodeURIComponent(
-      JSON.stringify(boardData, null, 2)
-    )));
+    // 2. Encode content safely for UTF-8
+    const jsonString = JSON.stringify(boardData, null, 2);
+    const content = btoa(unescape(encodeURIComponent(jsonString)));
 
+    // 3. Push to GitHub
     const r = await fetch(
       `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`,
       {
@@ -125,18 +127,26 @@ async function saveBoard() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          message: 'update board',
+          message: 'Lore update: Character board modified',
           content,
-          sha: fileSha,
+          sha: fileSha, // Use the fresh SHA
           branch: BRANCH
         })
       }
     );
 
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      const errData = await r.json();
+      throw new Error(errData.message || "Unknown GitHub Error");
+    }
 
     setStatus("Saved ✓");
+    // Update local fileSha with the one returned from the successful PUT
+    const resData = await r.json();
+    fileSha = resData.content.sha;
+
   } catch (e) {
+    console.error(e);
     setStatus("Save failed: " + e.message);
   }
 
