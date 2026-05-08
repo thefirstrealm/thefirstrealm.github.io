@@ -53,7 +53,9 @@
           "id": "card-3",
           "roleplayName": "Nyxara",
           "username": "@velvetquill",
-          "titles": [],
+          "titles": [
+            "Ser Nyxara"
+          ],
           "factions": [],
           "religion": "",
           "characterAge": 0,
@@ -61,7 +63,7 @@
             "mage",
             "ancient"
           ],
-          "created": "2024-12-20"
+          "created": "2026-05-08"
         }
       ]
     }
