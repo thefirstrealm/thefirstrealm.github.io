@@ -82,15 +82,13 @@ function doLogin() {
 
 // ───────── GITHUB API ─────────
 async function ghGet() {
+  const headers = {
+    'Accept': 'application/vnd.github.v3+json'
+  };
+  if (GH_TOKEN) headers.Authorization = `Bearer ${GH_TOKEN}`;
   const r = await fetch(
     `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}&t=${Date.now()}`,
-    { 
-      headers: { 
-        Authorization: `Bearer ${GH_TOKEN}`,
-        'Cache-Control': 'no-cache',
-        'Accept': 'application/vnd.github.v3+json'
-      } 
-    }
+    { headers }
   );
   if (!r.ok) throw new Error(await r.text());
   return r.json();
@@ -105,7 +103,7 @@ async function loadBoard() {
     setStatus("Loaded ✓");
   } catch (e) {
     console.error(e);
-    setStatus("Load failed: Check Token/Permissions");
+    setStatus("Load failed: " + e.message);
   }
 }
 
@@ -155,9 +153,9 @@ function render() {
       <div class="col-header">
         <span class="col-title">${col.title}</span>
         <div style="display:flex; gap:5px;">
-          <button class="btn-icon" onclick="renameColumn(${ci})">✎</button>
-          <button class="btn-icon" onclick="deleteColumn(${ci})">🗑</button>
-          <button class="btn-icon" onclick="openNew(${ci})">+</button>
+          <button onclick="renameColumn(${ci})">✎</button>
+          <button onclick="deleteColumn(${ci})">🗑</button>
+          <button onclick="openNew(${ci})">+</button>
         </div>
       </div>
       <div class="cards"></div>
@@ -169,7 +167,7 @@ function render() {
       cardEl.innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:start;">
           <strong class="card-name">${c.roleplayName || 'Unnamed'}</strong>
-          <button class="btn-delete" onclick="deleteCard(${ci},${ki})">×</button>
+          <button onclick="deleteCard(${ci},${ki})" style="background:none; color:var(--danger); border:none; padding:0 5px;">×</button>
         </div>
         <div class="card-owner">${c.username || ''}</div>
         <button class="btn-primary" style="font-size:0.7rem; padding:4px 8px; margin-top:8px;" onclick="edit(${ci},${ki})">Edit Profile</button>
