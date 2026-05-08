@@ -132,20 +132,42 @@ async function ghGet() {
 async function saveBoard() {
   document.getElementById('save-btn').disabled = true;
   setSaveStatus('Saving…');
+
   try {
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(boardData, null, 2))));
+    // 🔥 refresh latest SHA before writing
+    const latest = await ghGet();
+    fileSha = latest.sha;
+
+    const content = btoa(unescape(encodeURIComponent(
+      JSON.stringify(boardData, null, 2)
+    )));
+
     const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${GH_TOKEN}`, 'Content-Type': 'application/json', Accept: 'application/vnd.github+json' },
-      body: JSON.stringify({ message: 'Update board.json via editor', content, sha: fileSha, branch: BRANCH })
+      headers: {
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github+json'
+      },
+      body: JSON.stringify({
+        message: 'Update board.json via editor',
+        content,
+        sha: fileSha,
+        branch: BRANCH
+      })
     });
+
     if (!r.ok) throw new Error(await r.text());
+
     const data = await r.json();
     fileSha = data.content.sha;
-    setSaveStatus('Saved ✓  ' + new Date().toLocaleTimeString());
-  } catch(e) {
+
+    setSaveStatus('Saved ✓ ' + new Date().toLocaleTimeString());
+
+  } catch (e) {
     setSaveStatus('Save failed: ' + e.message);
   }
+
   document.getElementById('save-btn').disabled = false;
 }
 
