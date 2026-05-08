@@ -12,17 +12,17 @@
   <h1>✦ Lore Team Editor</h1>
   <input type="password" id="pw-input" placeholder="Editor password" onkeydown="if(event.key==='Enter')doLogin()">
   <input type="password" id="pat-input" placeholder="GitHub PAT (github_pat_...)" onkeydown="if(event.key==='Enter')doLogin()">
-  <p class="help-text">Token is stored only in this browser.</p>
-  <button onclick="doLogin()">Enter</button>
-  <span id="login-err"></span>
+  <p class="help-text" style="color: var(--muted); font-size: 0.8rem;">Token is stored only in this browser.</p>
+  <button class="btn-primary" onclick="doLogin()">Enter</button>
+  <span id="login-err" style="color: var(--danger); font-size: 0.9rem;"></span>
 </div>
 
 <div id="app" style="display:none;">
   <header>
     <h1>✦ Lore Editor</h1>
-    <button onclick="addColumn()">+ Category</button>
+    <button class="btn-primary" onclick="addColumn()">+ Category</button>
     <span id="save-status"></span>
-    <button id="save-btn" onclick="saveBoard()">Save</button>
+    <button id="save-btn" onclick="saveBoard()">Save to GitHub</button>
   </header>
 
   <div id="board"></div>
@@ -30,7 +30,7 @@
 
 <div class="modal-backdrop" id="edit-modal">
   <div class="modal">
-    <button onclick="closeEditModal()">×</button>
+    <button class="modal-close" onclick="closeEditModal()">×</button>
     <h2 id="edit-title"></h2>
 
     <div class="field"><label>Roleplay Name</label><input id="f-rpname"></div>
@@ -42,8 +42,8 @@
     <div class="field"><label>Attributes</label><input id="f-attributes" placeholder="comma separated"></div>
 
     <div class="modal-footer">
-      <button onclick="closeEditModal()">Cancel</button>
-      <button onclick="saveCard()">Save</button>
+      <button class="btn-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveCard()">Update Card</button>
     </div>
   </div>
 </div>
@@ -53,20 +53,18 @@ const OWNER = 'thefirstrealm';
 const REPO = 'thefirstrealm.github.io';
 const FILE = 'board.json';
 const BRANCH = 'main';
-
 const EDITOR_PASSWORD = 'lore-team-2025';
 
 let GH_TOKEN = '';
 let boardData = null;
 let editing = null;
-let fileSha = null;
 
 window.onload = () => {
   const t = localStorage.getItem('lore_gh_token');
   if (t) document.getElementById('pat-input').value = t;
 };
 
-// ───────── LOGIN ─────────
+// ───────── AUTH ─────────
 function doLogin() {
   const pw = document.getElementById('pw-input').value;
   const pat = document.getElementById('pat-input').value.trim();
@@ -77,22 +75,20 @@ function doLogin() {
 
   GH_TOKEN = pat;
   localStorage.setItem('lore_gh_token', pat);
-
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-
   loadBoard();
 }
 
-// ───────── GITHUB ─────────
+// ───────── GITHUB API ─────────
 async function ghGet() {
-  // Added timestamp to URL to prevent 409 Conflict errors caused by browser caching
   const r = await fetch(
     `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}?ref=${BRANCH}&t=${Date.now()}`,
     { 
       headers: { 
         Authorization: `Bearer ${GH_TOKEN}`,
-        'Cache-Control': 'no-cache' 
+        'Cache-Control': 'no-cache',
+        'Accept': 'application/vnd.github.v3+json'
       } 
     }
   );
@@ -104,12 +100,12 @@ async function loadBoard() {
   setStatus("Loading...");
   try {
     const res = await ghGet();
-    fileSha = res.sha;
-    boardData = JSON.parse(atob(res.content.replace(/\n/g,'')));
+    boardData = JSON.parse(decodeURIComponent(escape(atob(res.content.replace(/\s/g, '')))));
     render();
     setStatus("Loaded ✓");
   } catch (e) {
-    setStatus("Load failed: " + e.message);
+    console.error(e);
+    setStatus("Load failed: Check Token/Permissions");
   }
 }
 
@@ -119,189 +115,104 @@ async function saveBoard() {
   saveBtn.disabled = true;
 
   try {
-    // 1. Force fetch the absolute latest SHA right before sending update
     const latest = await ghGet();
-    fileSha = latest.sha;
-
-    // 2. Encode content safely for UTF-8
     const jsonString = JSON.stringify(boardData, null, 2);
     const content = btoa(unescape(encodeURIComponent(jsonString)));
 
-    // 3. Push to GitHub using the fresh SHA
-    const r = await fetch(
-      `https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${GH_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          message: 'Lore update: Character board modified',
-          content,
-          sha: fileSha,
-          branch: BRANCH
-        })
-      }
-    );
+    const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE}`, {
+      method: 'PUT',
+      headers: { 
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({
+        message: 'Lore update: Character board modified',
+        content,
+        sha: latest.sha,
+        branch: BRANCH
+      })
+    });
 
-    if (!r.ok) {
-      const errData = await r.json();
-      throw new Error(errData.message || "Unknown GitHub Error");
-    }
-
-    // 4. Update the local SHA with the one returned from the successful save
-    const resData = await r.json();
-    fileSha = resData.content.sha;
-
+    if (!r.ok) throw new Error("GitHub Error");
     setStatus("Saved ✓");
   } catch (e) {
+    setStatus("Save failed");
     console.error(e);
-    setStatus("Save failed: " + e.message);
   }
-
   saveBtn.disabled = false;
 }
 
-function setStatus(t) {
-  document.getElementById('save-status').textContent = t;
-}
-
-// ───────── BOARD RENDER ─────────
+// ───────── UI RENDER ─────────
 function render() {
   const board = document.getElementById('board');
   board.innerHTML = '';
-
-  if (!boardData || !boardData.columns) return;
+  if (!boardData?.columns) return;
 
   boardData.columns.forEach((col, ci) => {
     const el = document.createElement('div');
     el.className = 'column';
-
     el.innerHTML = `
       <div class="col-header">
-        <span>${col.title}</span>
-        <button onclick="renameColumn(${ci})">✎</button>
-        <button onclick="deleteColumn(${ci})">🗑</button>
-        <button onclick="openNew(${ci})">+</button>
+        <span class="col-title">${col.title}</span>
+        <div style="display:flex; gap:5px;">
+          <button onclick="renameColumn(${ci})">✎</button>
+          <button onclick="deleteColumn(${ci})">🗑</button>
+          <button onclick="openNew(${ci})">+</button>
+        </div>
       </div>
       <div class="cards"></div>
     `;
-
     const cardsEl = el.querySelector('.cards');
-
     col.cards.forEach((c, ki) => {
-      cardsEl.appendChild(card(c, ci, ki));
+      const cardEl = document.createElement('div');
+      cardEl.className = 'card';
+      cardEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:start;">
+          <strong class="card-name">${c.roleplayName || 'Unnamed'}</strong>
+          <button onclick="deleteCard(${ci},${ki})" style="background:none; color:var(--danger); border:none; padding:0 5px;">×</button>
+        </div>
+        <div class="card-owner">${c.username || ''}</div>
+        <button class="btn-primary" style="font-size:0.7rem; padding:4px 8px; margin-top:8px;" onclick="edit(${ci},${ki})">Edit Profile</button>
+      `;
+      cardsEl.appendChild(cardEl);
     });
-
     board.appendChild(el);
   });
 }
 
-function card(c, ci, ki) {
-  const el = document.createElement('div');
-  el.className = 'card';
+function setStatus(t) { document.getElementById('save-status').textContent = t; }
 
-  el.innerHTML = `
-    <div class="card-top">
-        <strong class="card-name">${c.roleplayName || 'Unnamed'}</strong>
-        <div class="card-actions">
-            <button onclick="edit(${ci},${ki})">Edit</button>
-            <button onclick="deleteCard(${ci},${ki})">×</button>
-        </div>
-    </div>
-    <div class="card-owner">${c.username || ''}</div>
-    <div class="card-desc">
-        ${c.factions?.join(', ') || ''}
-    </div>
-    <div class="tags">
-        ${(c.attributes || []).map(t => `<span class="tag">${t}</span>`).join('')}
-    </div>
-  `;
-
-  return el;
-}
-
-// ───────── COLUMNS ─────────
-function addColumn() {
-  const title = prompt("Category name:");
-  if (!title) return;
-
-  boardData.columns.push({
-    id: title.toLowerCase().replace(/\s+/g,'-'),
-    title,
-    cards: []
-  });
-
-  render();
-}
-
-function renameColumn(ci) {
-  const col = boardData.columns[ci];
-  const t = prompt("Rename:", col.title);
-  if (!t) return;
-  col.title = t;
-  render();
-}
-
-function deleteColumn(ci) {
-  if (!confirm("Delete column and all its cards?")) return;
-  boardData.columns.splice(ci,1);
-  render();
-}
-
-// ───────── CARDS ─────────
-function openNew(ci) {
-  editing = { ci, ki: null };
-  openModal("New Card", {});
-}
-
-function edit(ci, ki) {
-  editing = { ci, ki };
-  openModal("Edit Card", boardData.columns[ci].cards[ki]);
-}
-
-function deleteCard(ci, ki) {
-    if (!confirm("Delete this character?")) return;
-    boardData.columns[ci].cards.splice(ki, 1);
-    render();
-}
+// ───────── CRUD LOGIC ─────────
+function openNew(ci) { editing = { ci, ki: null }; openModal("New Character", {}); }
+function edit(ci, ki) { editing = { ci, ki }; openModal("Edit Character", boardData.columns[ci].cards[ki]); }
 
 function openModal(title, c) {
   document.getElementById('edit-title').textContent = title;
-
-  f('f-rpname', c.roleplayName);
-  f('f-username', c.username);
-  f('f-titles', (c.titles||[]).join(', '));
-  f('f-factions', (c.factions||[]).join(', '));
-  f('f-religion', c.religion);
-  f('f-age', c.characterAge);
-  f('f-attributes', (c.attributes||[]).join(', '));
-
+  const fields = ['rpname', 'username', 'titles', 'factions', 'religion', 'age', 'attributes'];
+  fields.forEach(f => {
+    const val = c[f === 'rpname' ? 'roleplayName' : (f === 'age' ? 'characterAge' : f)];
+    document.getElementById('f-' + f).value = Array.isArray(val) ? val.join(', ') : (val || '');
+  });
   document.getElementById('edit-modal').classList.add('open');
 }
 
-function f(id, v) {
-  document.getElementById(id).value = v || '';
-}
-
-function closeEditModal() {
-  document.getElementById('edit-modal').classList.remove('open');
-}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
 
 function saveCard() {
   const { ci, ki } = editing;
+  const getV = (id) => document.getElementById('f-' + id).value.trim();
+  const getS = (id) => getV(id).split(',').map(x => x.trim()).filter(Boolean);
 
   const card = {
     id: ki !== null ? boardData.columns[ci].cards[ki].id : 'card-' + Date.now(),
-    roleplayName: v('f-rpname'),
-    username: v('f-username'),
-    titles: split('f-titles'),
-    factions: split('f-factions'),
-    religion: v('f-religion'),
-    characterAge: Number(v('f-age') || 0),
-    attributes: split('f-attributes'),
-    created: ki !== null ? boardData.columns[ci].cards[ki].created : new Date().toISOString().slice(0,10)
+    roleplayName: getV('rpname'),
+    username: getV('username'),
+    titles: getS('titles'),
+    factions: getS('factions'),
+    religion: getV('religion'),
+    characterAge: Number(getV('age') || 0),
+    attributes: getS('attributes'),
+    created: ki !== null ? boardData.columns[ci].cards[ki].created : new Date().toISOString().split('T')[0]
   };
 
   if (ki !== null) boardData.columns[ci].cards[ki] = card;
@@ -311,12 +222,31 @@ function saveCard() {
   render();
 }
 
-function v(id) {
-  return document.getElementById(id).value.trim();
+function deleteCard(ci, ki) {
+  if (confirm("Delete this character?")) {
+    boardData.columns[ci].cards.splice(ki, 1);
+    render();
+  }
 }
 
-function split(id) {
-  return v(id).split(',').map(x=>x.trim()).filter(Boolean);
+function addColumn() {
+  const title = prompt("Category name:");
+  if (title) {
+    boardData.columns.push({ id: title.toLowerCase().replace(/\s+/g,'-'), title, cards: [] });
+    render();
+  }
+}
+
+function renameColumn(ci) {
+  const t = prompt("New name:", boardData.columns[ci].title);
+  if (t) { boardData.columns[ci].title = t; render(); }
+}
+
+function deleteColumn(ci) {
+  if (confirm("Delete category and all characters?")) {
+    boardData.columns.splice(ci, 1);
+    render();
+  }
 }
 </script>
 
