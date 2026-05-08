@@ -13,127 +13,172 @@
     <h1>✦ Lore Team — Character Board</h1>
     <p id="status">Loading…</p>
   </div>
-  <button id="refresh-btn" onclick="loadBoard()">↻ Refresh</button>
+  <button onclick="loadBoard()">↻ Refresh</button>
 </header>
 
 <div id="board"></div>
 
+<!-- ───────── MODAL ───────── -->
 <div id="modal-backdrop" onclick="closeModal(event)">
   <div id="modal">
     <button id="modal-close" onclick="closeModal()">×</button>
-    <img id="m-img" class="m-img" src="" alt="" style="display:none">
-    <h2 id="m-name"></h2>
-    <div id="m-owner" class="m-owner"></div>
-    <p id="m-desc" class="m-desc"></p>
-    <div id="m-tags" class="tags"></div>
+
+    <img id="m-img" class="m-img" style="display:none">
+
+    <h2 id="m-rpname"></h2>
+    <div id="m-username" class="m-owner"></div>
+
+    <div class="m-section">
+      <strong>Titles:</strong>
+      <span id="m-titles"></span>
+    </div>
+
+    <div class="m-section">
+      <strong>Factions:</strong>
+      <span id="m-factions"></span>
+    </div>
+
+    <div class="m-section">
+      <strong>Religion:</strong>
+      <span id="m-religion"></span>
+    </div>
+
+    <div class="m-section">
+      <strong>Age:</strong>
+      <span id="m-age"></span>
+    </div>
+
+    <p id="m-attributes" class="tags"></p>
   </div>
 </div>
 
 <script>
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
-// Replace with your GitHub details
-const OWNER = 'thefirstrealm';
-const REPO  = 'thefirstrealm.github.io';
-const FILE  = 'board.json';
-const BRANCH = 'main'; 
-// ─────────────────────────────────────────────────────────────────────────────
+const OWNER  = 'thefirstrealm';
+const REPO   = 'thefirstrealm.github.io';
+const FILE   = 'board.json';
+const BRANCH = 'main';
 
 const COL_COLORS = {
-  'submitted':  'var(--col-submitted)',
-  'in-review':  'var(--col-review)',
-  'approved':   'var(--col-approved)',
-  'published':  'var(--col-published)'
+  submitted: 'var(--col-submitted)',
+  'in-review': 'var(--col-review)',
+  approved: 'var(--col-approved)',
+  published: 'var(--col-published)'
 };
 
+// ───────── LOAD ─────────
 async function loadBoard() {
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Loading…';
-  
+  const status = document.getElementById('status');
+  status.textContent = 'Loading…';
+
   try {
-    // We use the raw.githubusercontent.com URL for public viewing.
-    // Cache-bust (?t=) is vital so writers' updates appear immediately for viewers.
     const url = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${FILE}?t=${Date.now()}`;
     const res = await fetch(url);
-    
-    if (!res.ok) throw new Error(`Github returned ${res.status}`);
-    
+
+    if (!res.ok) throw new Error(res.statusText);
+
     const data = await res.json();
-    renderBoard(data);
-    statusEl.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-  } catch(e) {
-    statusEl.textContent = 'Could not load board. Check repo settings.';
+    render(data);
+
+    status.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+  } catch (e) {
+    status.textContent = 'Load failed';
     console.error(e);
   }
 }
 
-function renderBoard(data) {
+// ───────── RENDER ─────────
+function render(data) {
   const board = document.getElementById('board');
   board.innerHTML = '';
-  
-  if (!data.columns) return;
 
-  for (const col of data.columns) {
-    const color = COL_COLORS[col.id] || '#6b7280';
+  for (const col of data.columns || []) {
     const colEl = document.createElement('div');
     colEl.className = 'column';
+
     colEl.innerHTML = `
       <div class="col-header">
-        <div class="col-dot" style="background:${color}"></div>
         <span class="col-title">${col.title}</span>
         <span class="col-count">${col.cards.length}</span>
       </div>
-      <div class="cards" id="col-${col.id}"></div>`;
-    board.appendChild(colEl);
+      <div class="cards"></div>
+    `;
 
     const cardsEl = colEl.querySelector('.cards');
-    if (col.cards.length === 0) {
-      cardsEl.innerHTML = '<div class="empty">No cards yet</div>';
+
+    for (const c of col.cards) {
+      const card = normalizeCard(c);
+
+      const el = document.createElement('div');
+      el.className = 'card';
+
+      el.onclick = () => openModal(card);
+
+      el.innerHTML = `
+        <div class="card-name">${card.roleplayName}</div>
+        <div class="card-owner">${card.username}</div>
+        <div class="card-desc">
+          ${card.factions?.join(', ') || ''}
+        </div>
+      `;
+
+      cardsEl.appendChild(el);
     }
 
-    for (const card of col.cards) {
-      const cardEl = document.createElement('div');
-      cardEl.className = 'card';
-      cardEl.onclick = () => openModal(card);
-      cardEl.innerHTML = `
-        ${card.image ? `<img class="card-img" src="${card.image}" alt="${card.name}">` : ''}
-        <div class="card-name">${card.name}</div>
-        <div class="card-owner">${card.owner}</div>
-        <div class="card-desc">${card.description}</div>
-        <div class="tags">${(card.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>`;
-      cardsEl.appendChild(cardEl);
-    }
+    board.appendChild(colEl);
   }
 }
 
+// ───────── NORMALISE OLD + NEW DATA ─────────
+function normalizeCard(c) {
+  return {
+    roleplayName: c.roleplayName || c.name || 'Unnamed',
+    username: c.username || c.owner || '',
+    titles: c.titles || [],
+    factions: c.factions || [],
+    religion: c.religion || '',
+    characterAge: c.characterAge || 0,
+    attributes: c.attributes || c.tags || [],
+    image: c.image || ''
+  };
+}
+
+// ───────── MODAL ─────────
 function openModal(card) {
-  document.getElementById('m-name').textContent = card.name;
-  document.getElementById('m-owner').textContent = card.owner;
-  document.getElementById('m-desc').textContent = card.description;
-  document.getElementById('m-tags').innerHTML = (card.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
-  
+  const c = normalizeCard(card);
+
+  document.getElementById('m-rpname').textContent = c.roleplayName;
+  document.getElementById('m-username').textContent = c.username;
+
+  document.getElementById('m-titles').textContent = c.titles.join(', ');
+  document.getElementById('m-factions').textContent = c.factions.join(', ');
+  document.getElementById('m-religion').textContent = c.religion;
+  document.getElementById('m-age').textContent = c.characterAge;
+
+  document.getElementById('m-attributes').innerHTML =
+    (c.attributes || []).map(t => `<span class="tag">${t}</span>`).join('');
+
   const img = document.getElementById('m-img');
-  if (card.image) { 
-    img.src = card.image; 
-    img.style.display = 'block'; 
-  } else { 
-    img.style.display = 'none'; 
+
+  if (c.image) {
+    img.src = c.image;
+    img.style.display = 'block';
+  } else {
+    img.style.display = 'none';
   }
-  
+
   document.getElementById('modal-backdrop').classList.add('open');
 }
 
 function closeModal(e) {
-  // Closes if clicking the backdrop, the X button, or if called directly
-  if (!e || e.target === document.getElementById('modal-backdrop') || e.currentTarget.id === 'modal-close') {
+  if (!e || e.target.id === 'modal-backdrop' || e.target.id === 'modal-close') {
     document.getElementById('modal-backdrop').classList.remove('open');
   }
 }
 
-// Initial Load
+// ───────── INIT ─────────
 loadBoard();
-
-// Auto-refresh every 5 minutes to catch team updates
 setInterval(loadBoard, 5 * 60 * 1000);
 </script>
+
 </body>
 </html>
